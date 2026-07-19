@@ -21,6 +21,7 @@
     "@pax/shared-types": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^22.20.1",
     "typescript": "^5.8.3",
     "vitest": "^3.2.0"
   }
