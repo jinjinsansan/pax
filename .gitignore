@@ -1,0 +1,23 @@
+# ===== secrets — 絶対にcommitしない =====
+.env
+.env.*
+!.env.example
+PAX.txt
+ありがとうございます。3枚とも確認しました。.txt
+secrets/
+*.pem
+*.key
+
+# ===== dependencies / build =====
+node_modules/
+dist/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+# ===== misc =====
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
