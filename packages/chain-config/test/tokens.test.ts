@@ -9,21 +9,21 @@ import {
 } from "../src/index.js";
 
 describe("TOKENS", () => {
-  it("仕様書§4のアドレスと一致する", () => {
+  it("仕様書§4のアドレスと一致する（小文字正規化 — viemのEIP-55検証対策）", () => {
     expect(TOKENS.USDT.address).toBe(
-      "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "0xdAC17F958D2ee523a2206206994597C13D831ec7".toLowerCase(),
     );
     expect(TOKENS.USDC.address).toBe(
-      "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".toLowerCase(),
     );
     expect(TOKENS.WETH.address).toBe(
-      "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".toLowerCase(),
     );
     expect(TOKENS.PAXG.address).toBe(
-      "0x45804880DE22913DAFE09F4980848ECE6ECBAF78",
+      "0x45804880DE22913DAFE09F4980848ECE6ECBAF78".toLowerCase(),
     );
     expect(TOKENS.XAUT.address).toBe(
-      "0x68749665FF8D2D112FA859AA293F07A622782F38",
+      "0x68749665FF8D2D112FA859AA293F07A622782F38".toLowerCase(),
     );
   });
 

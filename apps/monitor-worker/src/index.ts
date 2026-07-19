@@ -1,6 +1,11 @@
+import { createPublicClient, http } from "viem";
+import { mainnet } from "viem/chains";
 import { loadMonitorEnv } from "@pax/validation";
 import { createRepositories, createServiceClient } from "@pax/database";
-import { CHAIN_ID } from "@pax/chain-config";
+import { CHAIN_ID, ROUTES, type RouteId } from "@pax/chain-config";
+import { UniswapV3Adapter } from "@pax/dex-uniswap-v3";
+import { RouteQuoter } from "@pax/quote-engine";
+import { QuoteStage } from "./quotes.js";
 import { logger } from "./logger.js";
 import { RpcManager, type RpcEndpoint } from "./rpc.js";
 import { LeaseService } from "./lease.js";
@@ -62,11 +67,25 @@ async function main(): Promise<void> {
     },
   );
 
+  // Quote用クライアントはPrimary HTTPを直接使う（TODO: M5でRpcManagerのfailoverと統合）
+  const quoteClient = createPublicClient({
+    chain: mainnet,
+    transport: http(env.ETH_RPC_HTTP_PRIMARY),
+  });
+  const adapter = new UniswapV3Adapter(quoteClient);
+  const routeQuoter = new RouteQuoter(adapter, 3);
+  const quoteStage = new QuoteStage(
+    repos,
+    routeQuoter,
+    Object.keys(ROUTES) as RouteId[],
+  );
+
   const processor = new BlockProcessor(
     repos,
     CHAIN_ID,
     () => lease.isLeader,
     () => rpc.httpClient(),
+    (observationId, blockNumber) => quoteStage.run(observationId, blockNumber),
   );
 
   const rpc = new RpcManager(

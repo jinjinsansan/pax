@@ -1,23 +1,25 @@
 {
-  "name": "@pax/monitor-worker",
+  "name": "@pax/quote-engine",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src",
-    "start": "node --env-file=../../.env.local dist/index.js"
+    "lint": "eslint src"
   },
   "dependencies": {
     "@pax/chain-config": "workspace:*",
-    "@pax/database": "workspace:*",
     "@pax/dex-uniswap-v3": "workspace:*",
-    "@pax/quote-engine": "workspace:*",
-    "@pax/shared-types": "workspace:*",
-    "@pax/validation": "workspace:*",
-    "pino": "^9.5.0",
-    "viem": "^2.21.0"
+    "@pax/shared-types": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3"

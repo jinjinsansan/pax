@@ -18,6 +18,11 @@ export class BlockProcessor {
     private readonly chainId: number,
     private readonly isLeader: () => boolean,
     private readonly getHttpClient: () => PublicClient,
+    /** M4: Quoteステージ（observation保存後に呼ばれる）。M5でOpportunity評価に拡張 */
+    private readonly quoteStage?: (
+      observationId: number,
+      blockNumber: bigint,
+    ) => Promise<void>,
   ) {}
 
   async onNewBlock(event: NewBlockEvent): Promise<void> {
@@ -83,8 +88,17 @@ export class BlockProcessor {
       "block observed",
     );
 
-    // TODO(M4): ここでQuoteエンジンを起動（トリガー式: 参考乖離>=0.30%で全量Quote）
-    // TODO(M5): Opportunity評価 → DB保存 → Telegram判定
+    if (this.quoteStage && block.number !== null) {
+      try {
+        await this.quoteStage(observationId, block.number);
+      } catch (err) {
+        logger.error(
+          { block: blockNumber, err: (err as Error).message },
+          "quote stage failed",
+        );
+      }
+    }
+    // TODO(M5): Opportunity評価 → DB保存 → Telegram判定（トリガー式全量Quoteもここで）
   }
 
   private pruneRecentHashes(current: number): void {
