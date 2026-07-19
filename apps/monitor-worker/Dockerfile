@@ -2,9 +2,8 @@
 FROM node:22-slim AS builder
 RUN corepack enable
 WORKDIR /app
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json tsconfig.base.json ./
-COPY packages ./packages
-COPY apps/monitor-worker ./apps/monitor-worker
+# lockfileのimporterとworkspaceの不一致を避けるためリポジトリ全体をコピー
+COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @pax/monitor-worker... run build
 
