@@ -1,0 +1,23 @@
+# XServer VPS 主系構成（仕様書§13）
+# 配置: /opt/arbitrage/ 直下でリポジトリをcheckoutし、
+#       secrets は /opt/arbitrage/secrets/monitor.env に置く（git管理外）
+services:
+  monitor-worker:
+    build:
+      context: ../..
+      dockerfile: apps/monitor-worker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - /opt/arbitrage/secrets/monitor.env
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}

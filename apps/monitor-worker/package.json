@@ -1,0 +1,23 @@
+{
+  "name": "@pax/monitor-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "start": "node --env-file=../../.env.local dist/index.js"
+  },
+  "dependencies": {
+    "@pax/chain-config": "workspace:*",
+    "@pax/database": "workspace:*",
+    "@pax/shared-types": "workspace:*",
+    "@pax/validation": "workspace:*",
+    "pino": "^9.5.0",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

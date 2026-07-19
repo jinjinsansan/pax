@@ -15,6 +15,9 @@ dist/
 coverage/
 *.tsbuildinfo
 
+# ===== runtime state =====
+health.json
+
 # ===== misc =====
 .DS_Store
 Thumbs.db
