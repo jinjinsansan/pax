@@ -1,15 +1,29 @@
 /**
- * 通知テンプレート（仕様書§10の書式に準拠）。
- * 0.5%の乖離を0.5%の利益として表示してはならない（§1）—
- * すべてのテンプレートで参考値/実行可能値/純利益を明示的に区別する。
+ * 通知テンプレート（仕様書§10準拠・監視モニター向け日本語表現）。
+ *
+ * 方針（2026-07-19 仁さん指示）:
+ * - 機械的な数字の羅列にせず、意味と文脈を日本語で説明する
+ * - 友人など非エンジニアの読者にも伝わる表現にする
+ * - ただし「参考値 / 実行可能値 / 純利益」の区別は絶対に崩さない（§1）
  */
 
 function usd(v: string | number | null): string {
-  if (v === null) return "N/A";
+  if (v === null) return "不明";
   const n = typeof v === "string" ? Number(v) : v;
   return n.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  });
+}
+
+function jstNow(): string {
+  return new Date().toLocaleString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -19,14 +33,18 @@ export function formatInfo(params: {
   xautUsd: number | null;
 }): string {
   return [
-    "🟡 PAXG/XAUT 参考価格乖離",
+    "🟡 金トークンの価格に開きが出ています",
     "",
-    `乖離率: ${params.divergencePct.toFixed(2)}%`,
-    `PAXG: $${usd(params.paxgUsd)}`,
-    `XAUT: $${usd(params.xautUsd)}`,
-    `時刻: ${new Date().toISOString()} (UTC)`,
+    `2つの金トークン（PAXGとXAUT）の取引所価格に ${params.divergencePct.toFixed(2)}% の差が発生しました。`,
     "",
-    "注意: 外部参考価格の差であり、約定可能利益ではありません。",
+    `　PAXG（パクソス・ゴールド）: $${usd(params.paxgUsd)}`,
+    `　XAUT（テザー・ゴールド）: $${usd(params.xautUsd)}`,
+    "",
+    "⚠️ これは取引所の「表示価格」の差にすぎません。実際に売買して取れる利益とは別物です。",
+    "",
+    "システムはこれを合図に、実際のDEX（分散型取引所）へ全金額パターンの精密見積もりを開始しました。本当に利益が出る状態になれば 🟠 や 🟢 で続報します。",
+    "",
+    `${jstNow()} JST`,
   ].join("\n");
 }
 
@@ -41,18 +59,22 @@ export function formatOpportunity(params: {
   blockNumber: bigint;
   rejectionReasons: string[];
 }): string {
+  const divergence = params.executableDivergencePct
+    ? `${Number(params.executableDivergencePct) >= 0 ? "+" : ""}${params.executableDivergencePct}%`
+    : "不明";
   return [
-    "🟠 実行可能価格乖離を検出",
+    "🟠 「実際に交換してもプラス」の瞬間を検出",
     "",
-    `方向: ${params.routeDescription}`,
-    `想定元本: ${usd(params.amountUsd)} ${params.inputSymbol}`,
-    `実行可能乖離: ${params.executableDivergencePct ?? "N/A"}%`,
-    `粗利益: ${usd(params.grossProfitUsd)} ${params.inputSymbol}`,
-    `想定ガス: ${usd(params.gasCostExpectedUsd)} USD`,
-    `純利益見込: ${usd(params.netProfitUsd)} USD`,
-    `ブロック: ${params.blockNumber}`,
+    "表示価格だけでなく、DEXに実際の数量で見積もりを取った結果、一周してプラスになるルートが見つかりました。",
     "",
-    `判定: 純利益条件未達 (${params.rejectionReasons.join(", ") || "-"})`,
+    `　ルート: ${params.routeDescription}`,
+    `　元本: ${usd(params.amountUsd)} ${params.inputSymbol} を投入`,
+    `　往復結果: ${divergence}（板の厚み・DEX手数料込みの実測値）`,
+    `　粗利益: ${usd(params.grossProfitUsd)} ドル`,
+    "",
+    `ただし、ガス代（Ethereumの手数料、想定 ${usd(params.gasCostExpectedUsd)} ドル）と安全マージンを差し引くと、純利益見込みは ${usd(params.netProfitUsd)} ドル。通知基準（純利益25ドル以上など）には届かず、「惜しい機会」として記録しました。`,
+    "",
+    `ブロック番号: ${params.blockNumber} / ${jstNow()} JST`,
   ].join("\n");
 }
 
@@ -70,34 +92,59 @@ export function formatProfitable(params: {
   blockNumber: bigint;
   opportunityId: string;
 }): string {
-  const impactPct =
-    params.maxPriceImpactBps !== null
-      ? (params.maxPriceImpactBps / 100).toFixed(2)
-      : "N/A";
   return [
-    "🟢 純利益機会を検出",
+    "🟢 本物の裁定機会を検出しました！",
     "",
-    `方向: ${params.routeDescription}`,
-    `想定元本: ${usd(params.amountUsd)} ${params.inputSymbol}`,
-    `最終見込: ${usd(params.amountOutUsd)} ${params.inputSymbol}`,
-    `粗利益: ${usd(params.grossProfitUsd)} ${params.inputSymbol}`,
-    `ガス見込（High）: ${usd(params.gasCostHighUsd)} USD`,
-    `安全マージン: ${usd(params.safetyBufferUsd)} USD`,
-    `純利益見込: ${usd(params.netProfitUsd)} USD`,
-    `純利益率: ${params.netProfitPct ?? "N/A"}%`,
-    `最大価格影響: ${impactPct}%`,
-    `ブロック: ${params.blockNumber}`,
-    `機会ID: ${params.opportunityId}`,
+    "全コストを差し引いても利益が残る、正真正銘の裁定チャンスです。30日測定で数えるべき「本物の機会」としてカウントします。",
     "",
-    "監視のみ。取引は実行されていません。",
+    `　ルート: ${params.routeDescription}`,
+    `　元本: ${usd(params.amountUsd)} ${params.inputSymbol}`,
+    `　一周後: ${usd(params.amountOutUsd)} ${params.inputSymbol}`,
+    "",
+    `　粗利益:　　　　 +${usd(params.grossProfitUsd)} ドル`,
+    `　ガス代(高め見積): -${usd(params.gasCostHighUsd)} ドル`,
+    `　安全マージン:　　-${usd(params.safetyBufferUsd)} ドル`,
+    "　──────────────",
+    `　純利益見込み:　 +${usd(params.netProfitUsd)} ドル（${params.netProfitPct ?? "?"}%）`,
+    "",
+    `ブロック番号: ${params.blockNumber} / 機会ID: ${params.opportunityId}`,
+    `${jstNow()} JST`,
+    "",
+    "※このシステムは監視専用です。実際の取引は一切行っていません。",
   ].join("\n");
 }
 
 export function formatSystem(event: string, detail?: string): string {
   return [
-    `⚙️ SYSTEM: ${event}`,
+    `⚙️ システム通知: ${event}`,
     ...(detail ? ["", detail] : []),
     "",
-    `時刻: ${new Date().toISOString()} (UTC)`,
+    `${jstNow()} JST`,
+  ].join("\n");
+}
+
+/** Worker起動時の自己紹介つき通知 */
+export function formatBoot(params: {
+  workerId: string;
+  phase: number;
+}): string {
+  return [
+    "📡 pax 監視システム 起動しました",
+    "",
+    "Ethereumブロックチェーンへの接続が完了し、金トークン（PAXG / XAUT）の裁定監視を開始します。",
+    "",
+    "【このシステムがやっていること】",
+    "約12秒ごと（新しいブロックが生まれるたび）に、8種類の交換ルートへ「今、実際に交換したらいくら戻ってくるか」をDEXに問い合わせて記録しています。",
+    "",
+    "【通知の見方】",
+    "🟡 = 表示価格に差が出た（まだ儲かるとは言えない）",
+    "🟠 = 実際に交換してもプラスの瞬間（ただしガス代で消える）",
+    "🟢 = 全コスト込みでも利益が残る本物の機会",
+    "🚨 = システム停止の警報",
+    "",
+    "通知が静かな間は「儲かる機会が存在しない」ことを毎ブロック確認し続けている状態です。それ自体が貴重な測定データになります。",
+    "",
+    `worker: ${params.workerId} / Phase ${params.phase}（監視のみ・実取引なし）`,
+    `${jstNow()} JST`,
   ].join("\n");
 }

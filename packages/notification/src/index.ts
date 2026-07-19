@@ -11,4 +11,5 @@ export {
   formatOpportunity,
   formatProfitable,
   formatSystem,
+  formatBoot,
 } from "./templates.js";

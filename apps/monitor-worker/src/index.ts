@@ -9,6 +9,7 @@ import {
   AlertService,
   TelegramNotifier,
   formatSystem,
+  formatBoot,
 } from "@pax/notification";
 import { DEFAULT_THRESHOLDS } from "@pax/chain-config";
 import { QuoteStage } from "./quotes.js";
@@ -76,8 +77,10 @@ async function main(): Promise<void> {
           severity: "SYSTEM",
           dedupeKey: `system:lease:${isLeader}`,
           text: formatSystem(
-            isLeader ? "主系リーダー取得" : "主系リーダー喪失",
-            `worker: ${env.WORKER_ID} / epoch: ${epoch}`,
+            isLeader ? "この監視プロセスが主担当になりました" : "主担当を別プロセスへ引き継ぎました",
+            isLeader
+              ? `測定の二重計上を防ぐリーダー選出の結果、${env.WORKER_ID} が記録係になりました。`
+              : `${env.WORKER_ID} は待機に回ります。別プロセスが記録を継続します。`,
           ),
         });
       }
@@ -140,12 +143,18 @@ async function main(): Promise<void> {
       updateHealth({ rpcProvider: status.provider });
       // RPC切断・切替のSYSTEM通知（仕様書§10、WS_CONNECTEDは平常のため除く）
       if (alerts && status.kind !== "WS_CONNECTED") {
+        const explain =
+          status.kind === "POLLING_FALLBACK"
+            ? "Ethereumへのリアルタイム接続が切れたため、5秒間隔の予備方式に切り替えて監視を継続しています。データは途切れていません。リアルタイム接続の復旧も自動で試みます。"
+            : `メインのブロックチェーン接続が不調のため、予備のプロバイダー（${status.provider}）へ自動で切り替えました。監視は継続しています。`;
         void alerts.raise({
           severity: "SYSTEM",
           dedupeKey: `system:rpc:${status.kind}`,
           text: formatSystem(
-            `RPC ${status.kind}`,
-            `provider: ${status.provider}${status.detail ? `\n${status.detail}` : ""}`,
+            status.kind === "POLLING_FALLBACK"
+              ? "接続を予備方式へ切替"
+              : "接続先を予備へ切替",
+            explain,
           ),
         });
       }
@@ -163,10 +172,7 @@ async function main(): Promise<void> {
     await alerts.raise({
       severity: "SYSTEM",
       dedupeKey: "system:boot",
-      text: formatSystem(
-        "Monitor Worker 起動",
-        `worker: ${env.WORKER_ID} / role: ${env.WORKER_ROLE} / Phase ${env.PHASE}（監視のみ・取引なし）`,
-      ),
+      text: formatBoot({ workerId: env.WORKER_ID, phase: env.PHASE }),
     });
   }
 
@@ -181,7 +187,10 @@ async function main(): Promise<void> {
         .raise({
           severity: "SYSTEM",
           dedupeKey: "system:shutdown",
-          text: formatSystem("Monitor Worker 停止", `worker: ${env.WORKER_ID} / signal: ${signal}`),
+          text: formatSystem(
+            "監視システムを停止します",
+            `worker ${env.WORKER_ID} が停止信号（${signal}）を受け取りました。メンテナンス等の計画停止であれば、まもなく「起動しました」の通知が続きます。続かない場合は🚨警報が別途届きます。`,
+          ),
         })
         .catch(() => {});
     }
