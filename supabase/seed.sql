@@ -21,7 +21,7 @@ insert into arb.system_config (key, value, is_secret) values
     "degraded_mode_block_interval": 30,
     "degraded_mode_amounts_usd": [10000]
   }'::jsonb, false),
-  ('routes_enabled', '["A", "B", "C", "D", "E", "F"]'::jsonb, false)
+  ('routes_enabled', '["A", "B", "C", "D", "E", "F", "G", "H"]'::jsonb, false)
 on conflict (key) do nothing;
 
 -- 対象トークン（spec §4 — decimalsは起動時にオンチェーン照合される期待値）

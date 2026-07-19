@@ -18,11 +18,17 @@ export class BlockProcessor {
     private readonly chainId: number,
     private readonly isLeader: () => boolean,
     private readonly getHttpClient: () => PublicClient,
-    /** M4: Quoteステージ（observation保存後に呼ばれる）。M5でOpportunity評価に拡張 */
+    /** Quote＆機会評価パイプライン（observation保存後に呼ばれる） */
     private readonly quoteStage?: (
       observationId: number,
       blockNumber: bigint,
+      gasInfo: {
+        baseFeePerGas: bigint | null;
+        priorityFeePerGas: bigint | null;
+      },
     ) => Promise<void>,
+    /** CEX参考価格からのETH/USD（observationに記録） */
+    private readonly getEthUsd?: () => number | null,
   ) {}
 
   async onNewBlock(event: NewBlockEvent): Promise<void> {
@@ -70,7 +76,7 @@ export class BlockProcessor {
       block_timestamp: new Date(Number(block.timestamp) * 1000).toISOString(),
       base_fee_per_gas: block.baseFeePerGas?.toString() ?? null,
       priority_fee_per_gas: priorityFee?.toString() ?? null,
-      eth_usd: null, // M4: 参考価格レイヤーで設定
+      eth_usd: this.getEthUsd?.()?.toString() ?? null,
       rpc_provider: provider,
       rpc_latency_ms: latencyMs,
     });
@@ -90,7 +96,10 @@ export class BlockProcessor {
 
     if (this.quoteStage && block.number !== null) {
       try {
-        await this.quoteStage(observationId, block.number);
+        await this.quoteStage(observationId, block.number, {
+          baseFeePerGas: block.baseFeePerGas,
+          priorityFeePerGas: priorityFee,
+        });
       } catch (err) {
         logger.error(
           { block: blockNumber, err: (err as Error).message },
@@ -98,7 +107,7 @@ export class BlockProcessor {
         );
       }
     }
-    // TODO(M5): Opportunity評価 → DB保存 → Telegram判定（トリガー式全量Quoteもここで）
+    // TODO(M6): PROFITABLE/INFO/OPPORTUNITYのTelegram通知
   }
 
   private pruneRecentHashes(current: number): void {

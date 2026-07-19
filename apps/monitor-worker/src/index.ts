@@ -6,6 +6,7 @@ import { CHAIN_ID, ROUTES, type RouteId } from "@pax/chain-config";
 import { UniswapV3Adapter } from "@pax/dex-uniswap-v3";
 import { RouteQuoter } from "@pax/quote-engine";
 import { QuoteStage } from "./quotes.js";
+import { ReferencePriceService } from "./reference.js";
 import { logger } from "./logger.js";
 import { RpcManager, type RpcEndpoint } from "./rpc.js";
 import { LeaseService } from "./lease.js";
@@ -74,10 +75,12 @@ async function main(): Promise<void> {
   });
   const adapter = new UniswapV3Adapter(quoteClient);
   const routeQuoter = new RouteQuoter(adapter, 3);
+  const reference = new ReferencePriceService(10_000);
   const quoteStage = new QuoteStage(
     repos,
     routeQuoter,
     Object.keys(ROUTES) as RouteId[],
+    reference,
   );
 
   const processor = new BlockProcessor(
@@ -85,7 +88,9 @@ async function main(): Promise<void> {
     CHAIN_ID,
     () => lease.isLeader,
     () => rpc.httpClient(),
-    (observationId, blockNumber) => quoteStage.run(observationId, blockNumber),
+    (observationId, blockNumber, gasInfo) =>
+      quoteStage.run(observationId, blockNumber, gasInfo),
+    () => reference.snapshot()?.ethUsd ?? null,
   );
 
   const rpc = new RpcManager(
@@ -103,7 +108,8 @@ async function main(): Promise<void> {
     },
   );
 
-  // 起動順: lease → heartbeat → RPC購読
+  // 起動順: 参考価格 → lease → heartbeat → RPC購読
+  await reference.start();
   await lease.start();
   await heartbeat.start();
   await rpc.start();
@@ -113,6 +119,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, "shutting down");
     rpc.stop();
+    reference.stop();
     await lease.stop();
     await heartbeat.stop();
     process.exit(0);

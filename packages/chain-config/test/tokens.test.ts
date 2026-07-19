@@ -49,7 +49,7 @@ describe("TOKENS", () => {
 });
 
 describe("ROUTES", () => {
-  it("全6ルートが定義されている", () => {
+  it("全8ルートが定義されている（G/H = WETH中継）", () => {
     expect(Object.keys(ROUTES).sort()).toEqual([
       "A",
       "B",
@@ -57,6 +57,8 @@ describe("ROUTES", () => {
       "D",
       "E",
       "F",
+      "G",
+      "H",
     ]);
   });
 
@@ -66,8 +68,8 @@ describe("ROUTES", () => {
     }
   });
 
-  it("三角ルートA-Dは金トークンを2つ経由する", () => {
-    for (const id of ["A", "B", "C", "D"] as const) {
+  it("三角ルートA-D・G-Hは金トークンを2つ経由する", () => {
+    for (const id of ["A", "B", "C", "D", "G", "H"] as const) {
       const goldLegs = ROUTES[id].symbols.filter(
         (s) => TOKENS[s].isGoldToken,
       );

@@ -7,7 +7,7 @@ import { TOKENS, type TokenSymbol } from "./tokens.js";
  * E/F:     往復ルート（ベンチマーク用）
  */
 
-export type RouteId = "A" | "B" | "C" | "D" | "E" | "F";
+export type RouteId = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
 
 export interface RouteConfig {
   id: RouteId;
@@ -45,6 +45,18 @@ export const ROUTES: Record<RouteId, RouteConfig> = {
     id: "F",
     symbols: ["USDT", "XAUT", "USDT"],
     description: "USDT -> XAUT -> USDT",
+  },
+  // G/H: WETH中継（初実測でUSDT/PAXG直プールがダストと判明したため追加。
+  // PAXGの主流動性はPAXG/WETHプールにある）
+  G: {
+    id: "G",
+    symbols: ["USDT", "WETH", "PAXG", "XAUT", "USDT"],
+    description: "USDT -> WETH -> PAXG -> XAUT -> USDT",
+  },
+  H: {
+    id: "H",
+    symbols: ["USDT", "XAUT", "PAXG", "WETH", "USDT"],
+    description: "USDT -> XAUT -> PAXG -> WETH -> USDT",
   },
 } as const;
 

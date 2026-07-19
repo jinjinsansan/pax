@@ -13,6 +13,7 @@
     "@pax/chain-config": "workspace:*",
     "@pax/database": "workspace:*",
     "@pax/dex-uniswap-v3": "workspace:*",
+    "@pax/opportunity-engine": "workspace:*",
     "@pax/quote-engine": "workspace:*",
     "@pax/shared-types": "workspace:*",
     "@pax/validation": "workspace:*",
