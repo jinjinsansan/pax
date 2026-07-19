@@ -12,6 +12,13 @@ import {
   type EvaluatedOpportunity,
   type EvaluationThresholds,
 } from "@pax/opportunity-engine";
+import {
+  formatInfo,
+  formatOpportunity,
+  formatProfitable,
+  type AlertService,
+} from "@pax/notification";
+import { ROUTES } from "@pax/chain-config";
 import type { ReferencePriceService } from "./reference.js";
 import { logger } from "./logger.js";
 
@@ -48,6 +55,7 @@ export class QuoteStage {
     private readonly quoter: RouteQuoter,
     private readonly routeIds: RouteId[],
     private readonly reference: ReferencePriceService,
+    private readonly alerts: AlertService | null = null,
   ) {}
 
   async run(
@@ -93,8 +101,9 @@ export class QuoteStage {
             gasInfo.priorityFeePerGas ?? 1_000_000_000n,
           )
         : null;
-    const evaluated = quotes.map((q) =>
-      evaluateOpportunity({
+    const pairs = quotes.map((q) => ({
+      q,
+      e: evaluateOpportunity({
         quote: q.result,
         routeHash: q.routeHash,
         amountUsd: q.amountUsd,
@@ -104,28 +113,31 @@ export class QuoteStage {
         ethUsd: ref?.ethUsd ?? null,
         thresholds: THRESHOLDS,
       }),
-    );
+    }));
+    const evaluated = pairs.map((p) => p.e);
 
     const toSave = fullBurst
-      ? evaluated
-      : evaluated.filter(
-          (e) =>
-            e.grossProfitUsd !== null && Number(e.grossProfitUsd) > 0,
+      ? pairs
+      : pairs.filter(
+          (p) =>
+            p.e.grossProfitUsd !== null && Number(p.e.grossProfitUsd) > 0,
         );
+    let savedIds: string[] = [];
     if (toSave.length > 0) {
-      await this.repos.opportunities.insertMany(
-        toSave.map((e) => toOpportunityInsert(e, observationId)),
+      savedIds = await this.repos.opportunities.insertMany(
+        toSave.map((p) => toOpportunityInsert(p.e, observationId)),
       );
     }
 
     const profitable = evaluated.filter((e) => e.status === "NET_PROFITABLE");
     if (profitable.length > 0) {
-      // TODO(M6): Telegram PROFITABLE通知
       logger.warn(
         { block: blockNumber.toString(), count: profitable.length },
         "NET_PROFITABLE opportunities detected!",
       );
     }
+
+    await this.sendAlerts(ref, refDivergence, toSave, savedIds, blockNumber);
 
     const ok = quotes.filter((q) => q.result.success);
     const bestRt = ok
@@ -147,6 +159,87 @@ export class QuoteStage {
       "pipeline done",
     );
   }
+
+  private async sendAlerts(
+    ref: ReturnType<ReferencePriceService["snapshot"]>,
+    refDivergence: number | null,
+    toSave: { q: RouteQuote; e: EvaluatedOpportunity }[],
+    savedIds: string[],
+    blockNumber: bigint,
+  ): Promise<void> {
+    if (!this.alerts) return;
+
+    // INFO: 参考乖離のみ（約定可能利益ではないことをテンプレートで明示）
+    if (
+      refDivergence !== null &&
+      refDivergence >= THRESHOLDS.referenceAlertPct
+    ) {
+      await this.alerts.raise({
+        severity: "INFO",
+        dedupeKey: `reference:INFO:${bucket(refDivergence)}`,
+        text: formatInfo({
+          divergencePct: refDivergence,
+          paxgUsd: ref?.paxgUsd ?? null,
+          xautUsd: ref?.xautUsd ?? null,
+        }),
+        divergencePct: refDivergence,
+      });
+    }
+
+    for (let i = 0; i < toSave.length; i += 1) {
+      const pair = toSave[i];
+      if (!pair) continue;
+      const { q, e } = pair;
+      const route = ROUTES[q.routeId];
+      const inputSymbol = route.symbols[0] ?? "?";
+      const divBucket = bucket(q.roundTripPct ?? 0);
+
+      if (e.status === "NET_PROFITABLE") {
+        await this.alerts.raise({
+          severity: "PROFITABLE",
+          dedupeKey: `${q.routeHash}:${q.amountUsd}:PROFITABLE:${divBucket}`,
+          text: formatProfitable({
+            routeDescription: route.description,
+            amountUsd: q.amountUsd,
+            inputSymbol,
+            amountOutUsd: e.amountOutUsd,
+            grossProfitUsd: e.grossProfitUsd,
+            gasCostHighUsd: e.gasCostHighUsd,
+            safetyBufferUsd: e.safetyBufferUsd,
+            netProfitUsd: e.netProfitUsd,
+            netProfitPct: e.netProfitPct,
+            maxPriceImpactBps: e.maxPriceImpactBps,
+            blockNumber,
+            opportunityId: savedIds[i] ?? "unknown",
+          }),
+          opportunityId: savedIds[i],
+          netProfitUsd: e.netProfitUsd !== null ? Number(e.netProfitUsd) : undefined,
+        });
+      } else if (e.status === "EXECUTABLE_DIVERGENCE") {
+        await this.alerts.raise({
+          severity: "OPPORTUNITY",
+          dedupeKey: `${q.routeHash}:${q.amountUsd}:OPPORTUNITY:${divBucket}`,
+          text: formatOpportunity({
+            routeDescription: route.description,
+            amountUsd: q.amountUsd,
+            inputSymbol,
+            executableDivergencePct: e.executableDivergencePct,
+            grossProfitUsd: e.grossProfitUsd,
+            gasCostExpectedUsd: e.gasCostExpectedUsd,
+            netProfitUsd: e.netProfitUsd,
+            blockNumber,
+            rejectionReasons: e.rejectionReasons,
+          }),
+          opportunityId: savedIds[i],
+        });
+      }
+    }
+  }
+}
+
+/** 乖離を0.1%刻みでバケット化（dedupe key用 — 仕様書§10） */
+function bucket(pct: number): string {
+  return (Math.floor(pct * 10) / 10).toFixed(1);
 }
 
 function toQuoteInsert(q: RouteQuote, observationId: number): QuoteInsert {

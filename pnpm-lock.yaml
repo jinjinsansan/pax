@@ -38,6 +38,9 @@ importers:
       '@pax/dex-uniswap-v3':
         specifier: workspace:*
         version: link:../../packages/dex-adapters/uniswap-v3
+      '@pax/notification':
+        specifier: workspace:*
+        version: link:../../packages/notification
       '@pax/opportunity-engine':
         specifier: workspace:*
         version: link:../../packages/opportunity-engine
@@ -98,6 +101,19 @@ importers:
       viem:
         specifier: ^2.21.0
         version: 2.55.4(typescript@5.9.3)(zod@3.25.76)
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7
+
+  packages/notification:
+    dependencies:
+      '@pax/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
     devDependencies:
       typescript:
         specifier: ^5.8.3

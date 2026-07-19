@@ -5,6 +5,12 @@ import { createRepositories, createServiceClient } from "@pax/database";
 import { CHAIN_ID, ROUTES, type RouteId } from "@pax/chain-config";
 import { UniswapV3Adapter } from "@pax/dex-uniswap-v3";
 import { RouteQuoter } from "@pax/quote-engine";
+import {
+  AlertService,
+  TelegramNotifier,
+  formatSystem,
+} from "@pax/notification";
+import { DEFAULT_THRESHOLDS } from "@pax/chain-config";
 import { QuoteStage } from "./quotes.js";
 import { ReferencePriceService } from "./reference.js";
 import { logger } from "./logger.js";
@@ -65,6 +71,16 @@ async function main(): Promise<void> {
       logger.info({ isLeader, epoch: epoch.toString() }, "leadership changed");
       heartbeat.setStatus(isLeader ? "active" : "standby");
       updateHealth({ isLeader });
+      if (alerts) {
+        void alerts.raise({
+          severity: "SYSTEM",
+          dedupeKey: `system:lease:${isLeader}`,
+          text: formatSystem(
+            isLeader ? "主系リーダー取得" : "主系リーダー喪失",
+            `worker: ${env.WORKER_ID} / epoch: ${epoch}`,
+          ),
+        });
+      }
     },
   );
 
@@ -76,11 +92,29 @@ async function main(): Promise<void> {
   const adapter = new UniswapV3Adapter(quoteClient);
   const routeQuoter = new RouteQuoter(adapter, 3);
   const reference = new ReferencePriceService(10_000);
+
+  let alerts: AlertService | null = null;
+  if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+    const notifier = new TelegramNotifier(
+      env.TELEGRAM_BOT_TOKEN,
+      env.TELEGRAM_CHAT_ID,
+    );
+    alerts = new AlertService(repos.alerts, notifier, {
+      cooldownSeconds: env.ALERT_COOLDOWN_SECONDS,
+      recoveryThresholdPct: Number(DEFAULT_THRESHOLDS.recoveryThresholdPct),
+      alertThresholdPct: env.REFERENCE_ALERT_PCT,
+    });
+    logger.info("telegram alerts enabled");
+  } else {
+    logger.warn("telegram alerts disabled (no token/chat id)");
+  }
+
   const quoteStage = new QuoteStage(
     repos,
     routeQuoter,
     Object.keys(ROUTES) as RouteId[],
     reference,
+    alerts,
   );
 
   const processor = new BlockProcessor(
@@ -104,7 +138,17 @@ async function main(): Promise<void> {
     (status) => {
       logger.warn({ rpc: status }, "rpc status change");
       updateHealth({ rpcProvider: status.provider });
-      // TODO(M6): SYSTEM通知（RPC切断・切替 — 仕様書§10）
+      // RPC切断・切替のSYSTEM通知（仕様書§10、WS_CONNECTEDは平常のため除く）
+      if (alerts && status.kind !== "WS_CONNECTED") {
+        void alerts.raise({
+          severity: "SYSTEM",
+          dedupeKey: `system:rpc:${status.kind}`,
+          text: formatSystem(
+            `RPC ${status.kind}`,
+            `provider: ${status.provider}${status.detail ? `\n${status.detail}` : ""}`,
+          ),
+        });
+      }
     },
   );
 
@@ -115,6 +159,16 @@ async function main(): Promise<void> {
   await rpc.start();
 
   logger.info("monitor-worker started");
+  if (alerts) {
+    await alerts.raise({
+      severity: "SYSTEM",
+      dedupeKey: "system:boot",
+      text: formatSystem(
+        "Monitor Worker 起動",
+        `worker: ${env.WORKER_ID} / role: ${env.WORKER_ROLE} / Phase ${env.PHASE}（監視のみ・取引なし）`,
+      ),
+    });
+  }
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, "shutting down");
@@ -122,6 +176,15 @@ async function main(): Promise<void> {
     reference.stop();
     await lease.stop();
     await heartbeat.stop();
+    if (alerts) {
+      await alerts
+        .raise({
+          severity: "SYSTEM",
+          dedupeKey: "system:shutdown",
+          text: formatSystem("Monitor Worker 停止", `worker: ${env.WORKER_ID} / signal: ${signal}`),
+        })
+        .catch(() => {});
+    }
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));
